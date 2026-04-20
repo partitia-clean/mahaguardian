@@ -1,0 +1,20 @@
+# Core
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+click>=8.1.0
+
+# Cryptography — use PyNaCl for ed25519, pyrage for age, cryptography for TLS
+PyNaCl>=1.5.0
+pyrage>=1.0.0
+cryptography>=42.0.0
+
+# HTTP client for tool calls
+httpx>=0.27.0
+
+# Config parsing
+toml>=0.10.0
+PyYAML>=6.0.0
+
+# Async file I/O
+aiofiles>=23.0.0

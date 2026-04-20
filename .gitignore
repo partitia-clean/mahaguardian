@@ -1,0 +1,28 @@
+# Secrets — NEVER commit these
+*.key
+*.enc
+*.sig
+vault/
+SOUL.lock
+SOUL.hash
+.env
+*.pem
+*.p12
+mahaguardian.toml
+~/.mahaguardian/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+.git.backup*

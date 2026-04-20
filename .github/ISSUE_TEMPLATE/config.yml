@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability reporting
+    url: https://github.com/partitia-clean/mahaguardian/blob/main/SECURITY.md
+    about: Please report security vulnerabilities privately using the process in SECURITY.md
+  - name: Project support
+    url: https://github.com/partitia-clean/mahaguardian/blob/main/SUPPORT.md
+    about: Read documentation and support guidance before opening an issue

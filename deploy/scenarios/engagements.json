@@ -1,0 +1,85 @@
+{
+  "engagements": [
+    {
+      "id": 1,
+      "advisor": "company_a",
+      "advisor_name": "Landia Advisory",
+      "client": "company_b",
+      "client_name": "MH Energy",
+      "scope": "V2G strategy",
+      "label": "DEMO DAY",
+      "advisor_partitions": [
+        "company_a_eng_b",
+        "company_a_firm"
+      ],
+      "client_partitions": [
+        "company_b_commercial",
+        "company_b_legal"
+      ]
+    },
+    {
+      "id": 2,
+      "advisor": "company_a",
+      "advisor_name": "Landia Advisory",
+      "client": "company_c",
+      "client_name": "GreenGrid",
+      "scope": "Renewables strategy",
+      "label": "",
+      "advisor_partitions": [
+        "company_a_eng_c",
+        "company_a_firm"
+      ],
+      "client_partitions": [
+        "company_c"
+      ]
+    },
+    {
+      "id": 3,
+      "advisor": "company_d",
+      "advisor_name": "Kessler Law",
+      "client": "company_b",
+      "client_name": "MH Energy",
+      "scope": "Legal due diligence",
+      "label": "",
+      "advisor_partitions": [
+        "company_d_eng_b",
+        "company_d_firm"
+      ],
+      "client_partitions": [
+        "company_b_legal"
+      ]
+    },
+    {
+      "id": 4,
+      "advisor": "company_d",
+      "advisor_name": "Kessler Law",
+      "client": "company_e",
+      "client_name": "NordBatt",
+      "scope": "Supply contracts",
+      "label": "",
+      "advisor_partitions": [
+        "company_d_eng_e",
+        "company_d_firm"
+      ],
+      "client_partitions": [
+        "company_e"
+      ]
+    },
+    {
+      "id": 5,
+      "advisor": "company_d",
+      "advisor_name": "Kessler Law",
+      "client": "company_f",
+      "client_name": "ChargeNet",
+      "scope": "M&A advisory",
+      "label": "",
+      "advisor_partitions": [
+        "company_d_eng_f",
+        "company_d_firm"
+      ],
+      "client_partitions": [
+        "company_f"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,363 @@
+{
+  "items": [
+    {
+      "key": "b_v2g_economics_france",
+      "partition": "company_b_commercial",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "driver": "50%",
+        "MH": "25%",
+        "OEM": "25%"
+      },
+      "description": "MH V2G economics — France pilot revenue split"
+    },
+    {
+      "key": "b_oem_pipeline_europe",
+      "partition": "company_b_commercial",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": [
+        "BMW",
+        "Stellantis",
+        "Renault"
+      ],
+      "description": "MH OEM partnership pipeline — Europe"
+    },
+    {
+      "key": "b_commercial_terms",
+      "partition": "company_b_commercial",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": {
+        "advisory_fee": "2.5%",
+        "exclusivity": true
+      },
+      "description": "MH commercial engagement terms"
+    },
+    {
+      "key": "b_legal_structure",
+      "partition": "company_b_legal",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "entity": "MH Energy Ltd",
+        "jurisdiction": "UK"
+      },
+      "description": "MH legal entity structure"
+    },
+    {
+      "key": "b_legal_opinions",
+      "partition": "company_b_legal",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": "Counsel opinion on V2G regulatory framework...",
+      "description": "MH V2G regulatory legal opinions"
+    },
+    {
+      "key": "b_regulatory_status",
+      "partition": "company_b_legal",
+      "classification": "INTERNAL",
+      "display": "INTERNAL",
+      "value": "FCA sandbox application pending",
+      "description": "MH FCA sandbox application status"
+    },
+    {
+      "key": "b_public_filings",
+      "partition": "company_b_legal",
+      "classification": "PUBLIC",
+      "display": "PUBLIC",
+      "value": "MH Energy Ltd, Companies House",
+      "description": "MH public regulatory filings"
+    },
+    {
+      "key": "a_advisory_mandate_b",
+      "partition": "company_a_eng_b",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "client": "MH",
+        "scope": "V2G strategy"
+      },
+      "description": "Landia advisory mandate for MH engagement"
+    },
+    {
+      "key": "a_advisory_mandate_c",
+      "partition": "company_a_eng_c",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "client": "GreenGrid",
+        "scope": "renewables"
+      },
+      "description": "Landia advisory mandate for GreenGrid engagement"
+    },
+    {
+      "key": "a_client_list",
+      "partition": "company_a_firm",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": [
+        "MH",
+        "GreenGrid",
+        "Shell"
+      ],
+      "description": "Landia full client roster"
+    },
+    {
+      "key": "a_fee_schedule",
+      "partition": "company_a_firm",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": {
+        "MH": "£200k",
+        "GreenGrid": "£150k"
+      },
+      "description": "Landia engagement fee schedule"
+    },
+    {
+      "key": "a_public_filings",
+      "partition": "company_a_firm",
+      "classification": "PUBLIC",
+      "display": "PUBLIC",
+      "value": "Landia Advisory Ltd, Companies House",
+      "description": "Landia public regulatory filings"
+    },
+    {
+      "key": "c_project_pipeline",
+      "partition": "company_c",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": [
+        "Solar Farm Wales",
+        "Wind Park Scotland"
+      ],
+      "description": "GreenGrid development project pipeline"
+    },
+    {
+      "key": "c_land_acquisitions",
+      "partition": "company_c",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": [
+        {
+          "site": "Pembroke",
+          "acres": 200
+        }
+      ],
+      "description": "GreenGrid land acquisition targets"
+    },
+    {
+      "key": "c_grid_contracts",
+      "partition": "company_c",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "operator": "National Grid",
+        "term": "15yr"
+      },
+      "description": "GreenGrid grid connection contracts"
+    },
+    {
+      "key": "c_board_minutes",
+      "partition": "company_c",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": "Q1 2026 board minutes...",
+      "description": "GreenGrid Q1 2026 board minutes"
+    },
+    {
+      "key": "c_public_filings",
+      "partition": "company_c",
+      "classification": "PUBLIC",
+      "display": "PUBLIC",
+      "value": "GreenGrid Renewables Ltd",
+      "description": "GreenGrid public regulatory filings"
+    },
+    {
+      "key": "d_engagement_b",
+      "partition": "company_d_eng_b",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "client": "MH",
+        "scope": "V2G legal DD"
+      },
+      "description": "Kessler engagement notes for MH"
+    },
+    {
+      "key": "d_engagement_e",
+      "partition": "company_d_eng_e",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "client": "NordBatt",
+        "scope": "supply"
+      },
+      "description": "Kessler engagement notes for NordBatt"
+    },
+    {
+      "key": "d_engagement_f",
+      "partition": "company_d_eng_f",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "client": "ChargeNet",
+        "scope": "M&A"
+      },
+      "description": "Kessler engagement notes for ChargeNet"
+    },
+    {
+      "key": "d_all_clients",
+      "partition": "company_d_firm",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": [
+        "MH",
+        "NordBatt",
+        "ChargeNet"
+      ],
+      "description": "Kessler full client roster"
+    },
+    {
+      "key": "d_public_filings",
+      "partition": "company_d_firm",
+      "classification": "PUBLIC",
+      "display": "PUBLIC",
+      "value": "Kessler Law LLP, SRA register",
+      "description": "Kessler public regulatory filings"
+    },
+    {
+      "key": "e_cell_chemistry",
+      "partition": "company_e",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": {
+        "type": "solid-state"
+      },
+      "description": "NordBatt cell chemistry IP"
+    },
+    {
+      "key": "e_supply_contracts",
+      "partition": "company_e",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": [
+        {
+          "buyer": "MH",
+          "volume": "50GWh"
+        }
+      ],
+      "description": "NordBatt supply contract terms"
+    },
+    {
+      "key": "e_factory_plans",
+      "partition": "company_e",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": {
+        "location": "Gothenburg"
+      },
+      "description": "NordBatt factory build plans"
+    },
+    {
+      "key": "e_revenue_forecast",
+      "partition": "company_e",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "2026": "€120M"
+      },
+      "description": "NordBatt revenue forecast 2026"
+    },
+    {
+      "key": "e_public_filings",
+      "partition": "company_e",
+      "classification": "PUBLIC",
+      "display": "PUBLIC",
+      "value": "NordBatt AB, Bolagsverket",
+      "description": "NordBatt public regulatory filings"
+    },
+    {
+      "key": "f_network_map",
+      "partition": "company_f",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "chargers": 12000
+      },
+      "description": "ChargeNet EV charger network map"
+    },
+    {
+      "key": "f_acquisition_targets",
+      "partition": "company_f",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": [
+        "FastCharge GmbH"
+      ],
+      "description": "ChargeNet M&A acquisition targets"
+    },
+    {
+      "key": "f_revenue_per_charger",
+      "partition": "company_f",
+      "classification": "CONFIDENTIAL",
+      "display": "ADVISOR-SHAREABLE",
+      "value": {
+        "avg": "€8,400/yr"
+      },
+      "description": "ChargeNet revenue per charger"
+    },
+    {
+      "key": "f_board_minutes",
+      "partition": "company_f",
+      "classification": "RESTRICTED",
+      "display": "BOARD ONLY",
+      "value": "Q1 2026 board minutes...",
+      "description": "ChargeNet Q1 2026 board minutes"
+    },
+    {
+      "key": "f_public_filings",
+      "partition": "company_f",
+      "classification": "PUBLIC",
+      "display": "PUBLIC",
+      "value": "ChargeNet BV, KvK Netherlands",
+      "description": "ChargeNet public regulatory filings"
+    }
+  ],
+  "key_index": {
+    "b_v2g_economics_france": "company_b_commercial",
+    "b_oem_pipeline_europe": "company_b_commercial",
+    "b_commercial_terms": "company_b_commercial",
+    "b_legal_structure": "company_b_legal",
+    "b_legal_opinions": "company_b_legal",
+    "b_regulatory_status": "company_b_legal",
+    "b_public_filings": "company_b_legal",
+    "a_advisory_mandate_b": "company_a_eng_b",
+    "a_advisory_mandate_c": "company_a_eng_c",
+    "a_client_list": "company_a_firm",
+    "a_fee_schedule": "company_a_firm",
+    "a_public_filings": "company_a_firm",
+    "c_project_pipeline": "company_c",
+    "c_land_acquisitions": "company_c",
+    "c_grid_contracts": "company_c",
+    "c_board_minutes": "company_c",
+    "c_public_filings": "company_c",
+    "d_engagement_b": "company_d_eng_b",
+    "d_engagement_e": "company_d_eng_e",
+    "d_engagement_f": "company_d_eng_f",
+    "d_all_clients": "company_d_firm",
+    "d_public_filings": "company_d_firm",
+    "e_cell_chemistry": "company_e",
+    "e_supply_contracts": "company_e",
+    "e_factory_plans": "company_e",
+    "e_revenue_forecast": "company_e",
+    "e_public_filings": "company_e",
+    "f_network_map": "company_f",
+    "f_acquisition_targets": "company_f",
+    "f_revenue_per_charger": "company_f",
+    "f_board_minutes": "company_f",
+    "f_public_filings": "company_f"
+  },
+  "count": 32
+}

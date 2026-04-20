@@ -1,0 +1,56 @@
+# MahaGuardian agent container
+#
+# Runs the agent FastAPI server (agent/main.py) inside a minimal
+# Python 3.12-slim image. mTLS certificates are mounted at runtime;
+# secrets are never baked into the image.
+#
+# Build:
+#   docker build -f deploy/Dockerfile.agent -t mahaguardian-agent:latest .
+#
+# Run (example — Guardian supplies certs via volume mount):
+#   docker run \
+#     -e AGENT_ID=e1_advisor_a \
+#     -e GUARDIAN_HOST=host.docker.internal \
+#     -e GUARDIAN_PORT=7432 \
+#     -e AGENT_PORT=8443 \
+#     -v /path/to/certs:/certs:ro \
+#     -p 8443:8443 \
+#     mahaguardian-agent:latest
+
+FROM python:3.12-slim
+
+# System deps for PyNaCl (libsodium) and cryptography (libssl)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libsodium23 \
+        libssl3 \
+        && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy only what the agent needs — never the vault or signing keys
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY shared/   ./shared/
+COPY agent/    ./agent/
+
+# Non-root user — principle of least privilege
+RUN useradd --no-create-home --shell /bin/false mahaguardian
+USER mahaguardian
+
+# Agent listens on this port; override via AGENT_PORT env var
+EXPOSE 8443
+
+# Environment variables the agent reads at startup
+ENV AGENT_ID=""
+ENV GUARDIAN_HOST="127.0.0.1"
+ENV GUARDIAN_PORT="7432"
+ENV AGENT_PORT="8443"
+ENV MAHAGUARDIAN_CERT_PATH="/certs/agent.crt"
+ENV MAHAGUARDIAN_KEY_PATH="/certs/agent.key"
+ENV MAHAGUARDIAN_CA_PATH="/certs/ca.crt"
+
+ENTRYPOINT ["python", "-m", "uvicorn", "agent.main:app", \
+            "--host", "0.0.0.0", "--port", "8443", \
+            "--ssl-certfile", "/certs/agent.crt", \
+            "--ssl-keyfile", "/certs/agent.key"]

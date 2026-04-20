@@ -1,0 +1,321 @@
+{
+  "agents": [
+    {
+      "agent_id": "e1_director",
+      "engagement": 1,
+      "role": "Director on Landia and MH boards",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_a_firm",
+        "company_a_eng_b"
+      ]
+    },
+    {
+      "agent_id": "e1_advisor_a",
+      "engagement": 1,
+      "role": "Landia strategy agent for MH (eng B notes only)",
+      "access_level": "ADVISOR ACCESS",
+      "tlp_level": "AMBER",
+      "partitions": [
+        "company_a_eng_b"
+      ]
+    },
+    {
+      "agent_id": "e1_internal_a",
+      "engagement": 1,
+      "role": "Landia internal — MH engagement",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_a_firm",
+        "company_a_eng_b"
+      ]
+    },
+    {
+      "agent_id": "e1_internal_b",
+      "engagement": 1,
+      "role": "MH internal agent",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_b_commercial",
+        "company_b_legal"
+      ]
+    },
+    {
+      "agent_id": "e1_managing_b_for_a",
+      "engagement": 1,
+      "role": "MH agent managing Landia (commercial + legal)",
+      "access_level": "NEEDS APPROVAL",
+      "tlp_level": "AMBER_STRICT",
+      "partitions": [
+        "company_b_commercial",
+        "company_b_legal"
+      ]
+    },
+    {
+      "agent_id": "e1_external_b",
+      "engagement": 1,
+      "role": "External analyst — PUBLIC only",
+      "access_level": "PUBLIC ONLY",
+      "tlp_level": "GREEN",
+      "partitions": [
+        "company_b_commercial",
+        "company_b_legal"
+      ]
+    },
+    {
+      "agent_id": "e2_director",
+      "engagement": 2,
+      "role": "Director on Landia and GreenGrid boards",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_a_firm",
+        "company_a_eng_c"
+      ]
+    },
+    {
+      "agent_id": "e2_advisor_a",
+      "engagement": 2,
+      "role": "Landia agent for GreenGrid (eng C notes only)",
+      "access_level": "ADVISOR ACCESS",
+      "tlp_level": "AMBER",
+      "partitions": [
+        "company_a_eng_c"
+      ]
+    },
+    {
+      "agent_id": "e2_internal_a",
+      "engagement": 2,
+      "role": "Landia internal — GreenGrid engagement",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_a_firm",
+        "company_a_eng_c"
+      ]
+    },
+    {
+      "agent_id": "e2_internal_c",
+      "engagement": 2,
+      "role": "GreenGrid internal agent",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_c"
+      ]
+    },
+    {
+      "agent_id": "e2_managing_c",
+      "engagement": 2,
+      "role": "GreenGrid agent managing Landia",
+      "access_level": "ADVISOR ACCESS",
+      "tlp_level": "AMBER",
+      "partitions": [
+        "company_c"
+      ]
+    },
+    {
+      "agent_id": "e2_external_c",
+      "engagement": 2,
+      "role": "External analyst — PUBLIC only",
+      "access_level": "PUBLIC ONLY",
+      "tlp_level": "GREEN",
+      "partitions": [
+        "company_c"
+      ]
+    },
+    {
+      "agent_id": "e3_director",
+      "engagement": 3,
+      "role": "Kessler senior partner (MH legal only, no commercial)",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_d_firm",
+        "company_d_eng_b"
+      ]
+    },
+    {
+      "agent_id": "e3_lawyer_d",
+      "engagement": 3,
+      "role": "Kessler legal agent for MH (legal sub-partition only)",
+      "access_level": "ADVISOR ACCESS",
+      "tlp_level": "AMBER",
+      "partitions": [
+        "company_d_eng_b"
+      ]
+    },
+    {
+      "agent_id": "e3_internal_d",
+      "engagement": 3,
+      "role": "Kessler internal — MH engagement",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_d_firm",
+        "company_d_eng_b"
+      ]
+    },
+    {
+      "agent_id": "e3_internal_b_legal",
+      "engagement": 3,
+      "role": "MH legal-side internal agent",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_b_legal"
+      ]
+    },
+    {
+      "agent_id": "e3_managing_b_for_d",
+      "engagement": 3,
+      "role": "MH agent managing Kessler (legal only)",
+      "access_level": "ADVISOR ACCESS",
+      "tlp_level": "AMBER",
+      "partitions": [
+        "company_b_legal"
+      ]
+    },
+    {
+      "agent_id": "e3_external_b",
+      "engagement": 3,
+      "role": "External legal researcher — PUBLIC only",
+      "access_level": "PUBLIC ONLY",
+      "tlp_level": "GREEN",
+      "partitions": [
+        "company_b_legal"
+      ]
+    },
+    {
+      "agent_id": "e4_director",
+      "engagement": 4,
+      "role": "Kessler senior partner for NordBatt",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_d_firm",
+        "company_d_eng_e",
+        "company_e"
+      ]
+    },
+    {
+      "agent_id": "e4_lawyer_d",
+      "engagement": 4,
+      "role": "Kessler agent for NordBatt — AMBER_STRICT (battery IP)",
+      "access_level": "NEEDS APPROVAL",
+      "tlp_level": "AMBER_STRICT",
+      "partitions": [
+        "company_d_eng_e",
+        "company_e"
+      ]
+    },
+    {
+      "agent_id": "e4_internal_d",
+      "engagement": 4,
+      "role": "Kessler internal — NordBatt engagement",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_d_firm",
+        "company_d_eng_e"
+      ]
+    },
+    {
+      "agent_id": "e4_internal_e",
+      "engagement": 4,
+      "role": "NordBatt internal agent",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_e"
+      ]
+    },
+    {
+      "agent_id": "e4_managing_e",
+      "engagement": 4,
+      "role": "NordBatt agent managing Kessler",
+      "access_level": "ADVISOR ACCESS",
+      "tlp_level": "AMBER",
+      "partitions": [
+        "company_e"
+      ]
+    },
+    {
+      "agent_id": "e4_external_e",
+      "engagement": 4,
+      "role": "External analyst — PUBLIC only",
+      "access_level": "PUBLIC ONLY",
+      "tlp_level": "GREEN",
+      "partitions": [
+        "company_e"
+      ]
+    },
+    {
+      "agent_id": "e5_director",
+      "engagement": 5,
+      "role": "Kessler senior partner for ChargeNet",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_d_firm",
+        "company_d_eng_f",
+        "company_f"
+      ]
+    },
+    {
+      "agent_id": "e5_lawyer_d",
+      "engagement": 5,
+      "role": "Kessler agent for ChargeNet M&A",
+      "access_level": "ADVISOR ACCESS",
+      "tlp_level": "AMBER",
+      "partitions": [
+        "company_d_eng_f"
+      ]
+    },
+    {
+      "agent_id": "e5_internal_d",
+      "engagement": 5,
+      "role": "Kessler internal — ChargeNet engagement",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_d_firm",
+        "company_d_eng_f"
+      ]
+    },
+    {
+      "agent_id": "e5_internal_f",
+      "engagement": 5,
+      "role": "ChargeNet internal agent",
+      "access_level": "FULL ACCESS",
+      "tlp_level": "RED",
+      "partitions": [
+        "company_f"
+      ]
+    },
+    {
+      "agent_id": "e5_managing_f",
+      "engagement": 5,
+      "role": "ChargeNet agent managing Kessler",
+      "access_level": "ADVISOR ACCESS",
+      "tlp_level": "AMBER",
+      "partitions": [
+        "company_f"
+      ]
+    },
+    {
+      "agent_id": "e5_external_f",
+      "engagement": 5,
+      "role": "External analyst — PUBLIC only",
+      "access_level": "PUBLIC ONLY",
+      "tlp_level": "GREEN",
+      "partitions": [
+        "company_f"
+      ]
+    }
+  ],
+  "count": 30
+}
