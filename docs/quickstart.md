@@ -36,5 +36,4 @@ Expected result:
 
 - `README.md`
 - `docs/security-model.md`
-- `docs/architecture.md`
 - `docs/roadmap.md`
