@@ -8,7 +8,7 @@ TLP level may access:
   RED          — top-clearance: access all classifications
   AMBER_STRICT — RESTRICTED requires human elevation; others allowed
   AMBER        — RESTRICTED denied; CONFIDENTIAL and below allowed
-  GREEN        — only PUBLIC allowed (HW8 canonical matrix)
+  GREEN        — only PUBLIC allowed
   CLEAR        — only PUBLIC allowed
 
 Use check_tlp() — never index MATRIX directly from application code.
@@ -39,7 +39,7 @@ MATRIX: dict[tuple[TlpLevel, Classification], Decision] = {
     (TlpLevel.AMBER, Classification.INTERNAL):     Decision.ALLOW,
     (TlpLevel.AMBER, Classification.PUBLIC):       Decision.ALLOW,
 
-    # --- GREEN: only PUBLIC allowed (canonical HW8 matrix) ---
+    # --- GREEN: only PUBLIC allowed ---
     (TlpLevel.GREEN, Classification.RESTRICTED):   Decision.DENY,
     (TlpLevel.GREEN, Classification.CONFIDENTIAL): Decision.DENY,
     (TlpLevel.GREEN, Classification.INTERNAL):     Decision.DENY,
