@@ -17,6 +17,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 from fastapi.testclient import TestClient
 
 import guardian.audit as audit_module
@@ -49,10 +51,6 @@ def setup(tmp_path, monkeypatch):
     """Isolate every module to tmp_path."""
     audit_module.init_audit_log(tmp_path / "audit.db")
 
-    # FIX 10: TRUST_REQUEST_CERT defaults to False in production.
-    # Patch to True for tests that use TestClient (no real TLS).
-    monkeypatch.setattr(main_module, "TRUST_REQUEST_CERT", True)
-
     monkeypatch.setattr(vault_module, "VAULT_DIR", tmp_path / "vault")
     monkeypatch.setattr(vault_module, "VAULT_PATH", tmp_path / "vault" / "vault.enc")
     monkeypatch.setattr(vault_module, "KEYS_DIR", tmp_path / "vault" / "keys")
@@ -79,20 +77,28 @@ def setup(tmp_path, monkeypatch):
     payments_module._vault = None
     tools_module._vault = None
     main_module._vault_dict = None
+    main_module._revoke_timestamps.clear()
+    main_module._ws_clients.clear()
     llm_keys_module._vault = None
     clear_all()
 
 
+def _cert_pem_to_der(cert_pem: bytes) -> bytes:
+    cert = x509.load_pem_x509_certificate(cert_pem)
+    return cert.public_bytes(serialization.Encoding.DER)
+
+
 def _full_init(tmp_path):
-    """Full Guardian init returning (vault_dict, agent_cert_b64)."""
+    """Full Guardian init returning (vault_dict, agent_cert_der, agent_cert_b64)."""
     import nacl.signing as _nacl
     init_vault(PASSPHRASE)
     vault_dict = unlock_vault(PASSPHRASE)
 
     ca_cert, ca_key = mtls_module.generate_ca(CERT_PASSPHRASE)
-    agent_cert, _ = mtls_module.generate_agent_cert(
+    agent_cert_pem, _ = mtls_module.generate_agent_cert(
         "alpha", ca_cert, ca_key, CERT_PASSPHRASE,
     )
+    agent_cert = _cert_pem_to_der(agent_cert_pem)
 
     # Phase 3 token state
     _sk = _nacl.SigningKey.generate()
@@ -108,7 +114,7 @@ def _full_init(tmp_path):
     main_module._vault_dict = vault_dict
 
     agent_cert_b64 = base64.b64encode(agent_cert).decode("ascii")
-    return vault_dict, agent_cert_b64
+    return vault_dict, agent_cert, agent_cert_b64
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +223,7 @@ class TestSessionStartLLMKey:
     def test_session_start_includes_llm_key(self, setup, monkeypatch):
         """Response includes llm_key when vault has one."""
         tmp_path = setup
-        vault_dict, agent_cert_b64 = _full_init(tmp_path)
+        vault_dict, agent_cert, agent_cert_b64 = _full_init(tmp_path)
 
         # Add LLM key to vault
         vault_dict["llm_api_keys"] = {"anthropic": "sk-test-key-abc"}
@@ -225,6 +231,7 @@ class TestSessionStartLLMKey:
         core_dir, agents_dir = self._setup_soul_files(tmp_path, vault_dict)
         monkeypatch.setattr(main_module, "CORE_DIR", core_dir)
         monkeypatch.setattr(main_module, "AGENTS_SOUL_DIR", agents_dir)
+        monkeypatch.setattr(main_module, "_get_agent_cert", lambda request: agent_cert)
 
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.post("/session/start", json={
@@ -240,12 +247,13 @@ class TestSessionStartLLMKey:
     def test_session_start_without_llm_key(self, setup, monkeypatch):
         """Response omits llm_key when vault has none."""
         tmp_path = setup
-        vault_dict, agent_cert_b64 = _full_init(tmp_path)
+        vault_dict, agent_cert, agent_cert_b64 = _full_init(tmp_path)
 
         # No llm_api_keys in vault
         core_dir, agents_dir = self._setup_soul_files(tmp_path, vault_dict)
         monkeypatch.setattr(main_module, "CORE_DIR", core_dir)
         monkeypatch.setattr(main_module, "AGENTS_SOUL_DIR", agents_dir)
+        monkeypatch.setattr(main_module, "_get_agent_cert", lambda request: agent_cert)
 
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.post("/session/start", json={
@@ -259,12 +267,13 @@ class TestSessionStartLLMKey:
     def test_llm_key_not_in_audit_log(self, setup, monkeypatch):
         """The LLM key value must NEVER appear in any audit log entry."""
         tmp_path = setup
-        vault_dict, agent_cert_b64 = _full_init(tmp_path)
+        vault_dict, agent_cert, agent_cert_b64 = _full_init(tmp_path)
         vault_dict["llm_api_keys"] = {"anthropic": "sk-super-secret-12345"}
 
         core_dir, agents_dir = self._setup_soul_files(tmp_path, vault_dict)
         monkeypatch.setattr(main_module, "CORE_DIR", core_dir)
         monkeypatch.setattr(main_module, "AGENTS_SOUL_DIR", agents_dir)
+        monkeypatch.setattr(main_module, "_get_agent_cert", lambda request: agent_cert)
 
         client = TestClient(app, raise_server_exceptions=False)
         client.post("/session/start", json={

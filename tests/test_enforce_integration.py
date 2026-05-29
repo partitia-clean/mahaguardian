@@ -17,6 +17,7 @@ from guardian.enforcer import (
     EnforcementDenied,
     VaultRequest,
     enforce,
+    resolve_and_enforce,
     _find_items_no_tlp_check,
     scan_params,
 )
@@ -224,3 +225,25 @@ class TestEnforceAuditChainIntegration:
         entries = chain.entries()
         assert len(entries) >= 1
         assert any(e["decision"] == "ALLOW" for e in entries)
+
+    def test_sync_resolve_and_enforce_appends_deny_to_audit_chain(self, keypair, tmp_path):
+        """resolve_and_enforce() must append DENY decisions when audit_chain is provided."""
+        from guardian.audit_chain import AuditChain
+
+        chain = AuditChain(tmp_path / "sync-ac.db", hmac_key=b"test_key_enforce_integ_32bytes!!")
+
+        with pytest.raises(EnforcementDenied):
+            resolve_and_enforce(
+                "secret",
+                ["company-a"],
+                TlpLevel.GREEN,
+                {},
+                _vault(),
+                "agent",
+                known_partitions=["company-a"],
+                audit_chain=chain,
+            )
+
+        entries = chain.entries()
+        assert len(entries) >= 1
+        assert any(e["decision"] == "DENY" for e in entries)

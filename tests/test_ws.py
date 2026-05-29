@@ -56,9 +56,6 @@ def setup(tmp_path, monkeypatch):
     """Isolate every module to tmp_path."""
     audit_module.init_audit_log(tmp_path / "audit.db")
 
-    # FIX 10: patch TRUST_REQUEST_CERT=True for tests (no real TLS in TestClient)
-    monkeypatch.setattr(main_module, "TRUST_REQUEST_CERT", True)
-
     monkeypatch.setattr(vault_module, "VAULT_DIR", tmp_path / "vault")
     monkeypatch.setattr(vault_module, "VAULT_PATH", tmp_path / "vault" / "vault.enc")
     monkeypatch.setattr(vault_module, "KEYS_DIR", tmp_path / "vault" / "keys")
@@ -85,6 +82,8 @@ def setup(tmp_path, monkeypatch):
     payments_module._vault = None
     tools_module._vault = None
     main_module._vault_dict = None
+    main_module._revoke_timestamps.clear()
+    main_module._ws_clients.clear()
 
 
 def _init_modules(tmp_path):
@@ -725,8 +724,8 @@ class TestWSRequestIdRequired:
 
 class TestMTLSTransportBinding:
     """
-    Test that _get_agent_cert prefers TLS peer cert over request body,
-    and that verify_peer_agent_id_from_der works correctly.
+    Test that _get_agent_cert requires a TLS peer cert and that
+    verify_peer_agent_id_from_der works correctly.
     """
 
     def test_peer_cert_preferred_over_body(self, setup):
@@ -737,35 +736,21 @@ class TestMTLSTransportBinding:
         mock_request = MagicMock()
         mock_request.state.peer_cert_der = b"REAL-TLS-CERT-BYTES"
 
-        result = _get_agent_cert(mock_request, "ignored-b64")
+        result = _get_agent_cert(mock_request)
         assert result == b"REAL-TLS-CERT-BYTES"
 
-    def test_body_cert_fallback_when_no_tls(self, setup):
-        """When no TLS peer cert, falls back to body cert (Phase 1)."""
+    def test_no_tls_peer_cert_raises(self, setup):
+        """When no TLS peer cert is present, the request is rejected."""
         from guardian.main import _get_agent_cert
         from unittest.mock import MagicMock
-        import base64
-
-        mock_request = MagicMock()
-        mock_request.state.peer_cert_der = None
-
-        cert_bytes = b"BODY-CERT-BYTES"
-        b64 = base64.b64encode(cert_bytes).decode()
-        result = _get_agent_cert(mock_request, b64)
-        assert result == cert_bytes
-
-    def test_no_cert_at_all_raises_403(self, setup):
-        """No TLS cert and no body cert raises 403."""
-        from guardian.main import _get_agent_cert
         from fastapi import HTTPException
-        from unittest.mock import MagicMock
 
         mock_request = MagicMock()
         mock_request.state.peer_cert_der = None
 
         with pytest.raises(HTTPException) as exc_info:
-            _get_agent_cert(mock_request, "")
-        assert exc_info.value.status_code == 403
+            _get_agent_cert(mock_request)
+        assert exc_info.value.status_code == 500
 
     def test_verify_peer_agent_id_from_der_match(self, setup):
         """Correct CN passes verification."""

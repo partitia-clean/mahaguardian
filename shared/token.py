@@ -335,6 +335,10 @@ def verify_token_binding(
     """
     Verify all binding properties of the token against the presenting cert.
 
+    # SECURITY INVARIANT:
+    # No field from the token object may be used in security decisions or
+    # audit attribution until this function returns successfully.
+
     Steps (in order):
       1. Ed25519 signature verification.
       2. Expiry check (ISO comparison against UTC now).

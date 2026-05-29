@@ -19,6 +19,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 from fastapi.testclient import TestClient
 
 import guardian.audit as audit_module
@@ -84,11 +86,6 @@ def setup(tmp_path, monkeypatch):
     # Audit
     audit_module.init_audit_log(tmp_path / "audit.db")
 
-    # FIX 10: TRUST_REQUEST_CERT defaults to False in production.
-    # Tests use TestClient (no real TLS), so we patch it to True for the
-    # test process only — equivalent to running with MAHAGUARDIAN_DEV_MODE=1.
-    monkeypatch.setattr(main_module, "TRUST_REQUEST_CERT", True)
-
     # Vault paths
     monkeypatch.setattr(vault_module, "VAULT_DIR", tmp_path / "vault")
     monkeypatch.setattr(vault_module, "VAULT_PATH", tmp_path / "vault" / "vault.enc")
@@ -132,6 +129,8 @@ def setup(tmp_path, monkeypatch):
 
     # Reset main module state
     main_module._vault_dict = None
+    main_module._revoke_timestamps.clear()
+    main_module._ws_clients.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -165,18 +164,24 @@ def _create_soul_file(tmp_path: Path, name: str, content: str) -> Path:
     return soul_path
 
 
+def _cert_pem_to_der(cert_pem: bytes) -> bytes:
+    cert = x509.load_pem_x509_certificate(cert_pem)
+    return cert.public_bytes(serialization.Encoding.DER)
+
+
 def _full_guardian_init(tmp_path: Path) -> tuple[dict, bytes, str, str]:
     """
     Fully initialise Guardian modules and return test context.
 
-    Returns (vault_dict, agent_cert_bytes, agent_cert_b64, valid_token_str).
+    Returns (vault_dict, agent_cert_der, agent_cert_b64, valid_token_str).
     Uses Phase 3 tokens (shared.token.AccessToken).
     """
     import nacl.signing as _nacl_signing
     vault_dict = _init_vault_and_unlock(tmp_path)
     seed_demo_items(vault_dict)
     ca_cert, ca_key = _init_mtls(tmp_path)
-    agent_cert, _ = mtls_module.generate_agent_cert("alpha", ca_cert, ca_key, CERT_PASSPHRASE)
+    agent_cert_pem, _ = mtls_module.generate_agent_cert("alpha", ca_cert, ca_key, CERT_PASSPHRASE)
+    agent_cert = _cert_pem_to_der(agent_cert_pem)
 
     tools_module.init_tools(vault_dict)
     payments_module.init_payments(vault_dict)
@@ -186,7 +191,11 @@ def _full_guardian_init(tmp_path: Path) -> tuple[dict, bytes, str, str]:
     _sk = _nacl_signing.SigningKey.generate()
     main_module._signing_key_bytes = bytes(_sk)
     main_module._verify_key_bytes = bytes(_sk.verify_key)
-    main_module._revocation_store = RevocationStore()
+    main_module._revocation_store = RevocationStore(
+        persist_callback=lambda state: vault_dict.__setitem__(
+            "revocation_state", json.dumps(state, sort_keys=True)
+        )
+    )
     main_module._deduplicator = RequestDeduplicator()
 
     agent_cert_b64 = base64.b64encode(agent_cert).decode("ascii")
@@ -579,7 +588,7 @@ class TestAPIAttacks:
     """
 
     @pytest.fixture()
-    def api(self, setup):
+    def api(self, setup, monkeypatch):
         """
         Initialise all Guardian modules and return a dict with:
           - client: FastAPI TestClient
@@ -589,6 +598,7 @@ class TestAPIAttacks:
         """
         tmp_path = setup
         vault_dict, agent_cert, agent_cert_b64, token_str = _full_guardian_init(tmp_path)
+        monkeypatch.setattr(main_module, "_get_agent_cert", lambda request: agent_cert)
 
         client = TestClient(app, raise_server_exceptions=False)
         return {
@@ -881,6 +891,27 @@ class TestAPIAttacks:
         })
         assert response.status_code == 401
 
+    def test_revocation_state_persists_for_restart_reload(self, api):
+        """Revocation state written by the API must be reloadable after restart."""
+        issue_resp = api["client"].post("/tokens/issue", json={
+            "agent_id": "alpha",
+            "agent_cert_b64": api["agent_cert_b64"],
+        })
+        new_token = issue_resp.json()["token"]
+        token_id = json.loads(new_token)["token_id"]
+
+        revoke_resp = api["client"].post("/tokens/revoke", json={
+            "agent_id": "alpha",
+            "token_str": new_token,
+            "agent_cert_b64": api["agent_cert_b64"],
+        })
+        assert revoke_resp.status_code == 200
+
+        raw_state = api["vault"]["revocation_state"]
+        restored = RevocationStore()
+        restored.load(json.loads(raw_state))
+        assert restored.is_revoked(token_id, "alpha") is True
+
     # -----------------------------------------------------------------------
     # Health endpoint (no auth required)
     # -----------------------------------------------------------------------
@@ -1047,27 +1078,78 @@ class TestAPIAttacks:
             main_module.CORE_DIR = original_core
             main_module.AGENTS_SOUL_DIR = original_agents
 
+    def test_session_restart_revokes_prior_session_token(self, api):
+        """Starting a replacement session must invalidate the previous session token."""
+        tmp_path = api["tmp_path"]
+
+        priv_key, pub_key = generate_soul_keypair()
+        from guardian.vault import rotate_secret
+        rotate_secret(
+            api["vault"], "signing_keys.soul_public_key",
+            base64.b64encode(pub_key).decode("ascii"),
+            PASSPHRASE,
+        )
+
+        core_dir = tmp_path / "core"
+        core_dir.mkdir(parents=True, exist_ok=True)
+        agents_dir = core_dir / "agents"
+        agents_dir.mkdir(parents=True, exist_ok=True)
+
+        import shared.config as config_module
+        original_core = config_module.CORE_DIR
+        original_agents = config_module.AGENTS_SOUL_DIR
+        config_module.CORE_DIR = core_dir
+        config_module.AGENTS_SOUL_DIR = agents_dir
+        main_module.CORE_DIR = core_dir
+        main_module.AGENTS_SOUL_DIR = agents_dir
+
+        try:
+            master_path = core_dir / "master-SOUL.lock"
+            master_path.write_text('[meta]\nagent = "master"\n[rules]\nabsolute = []\n', encoding="utf-8")
+            sign_soul(master_path, priv_key)
+            update_soul_hash_ledger(master_path, priv_key)
+
+            agent_path = agents_dir / "alpha-SOUL.lock"
+            agent_path.write_text('[meta]\nagent = "alpha"\n[rules]\nabsolute = []\n', encoding="utf-8")
+            sign_soul(agent_path, priv_key)
+            update_soul_hash_ledger(agent_path, priv_key)
+
+            first = api["client"].post("/session/start", json={"agent_id": "alpha"})
+            assert first.status_code == 200
+            first_token = first.json()["token"]
+
+            second = api["client"].post("/session/start", json={"agent_id": "alpha"})
+            assert second.status_code == 200
+
+            reuse = api["client"].post("/tools/execute", json={
+                "agent_id": "alpha",
+                "token_str": first_token,
+                "agent_cert_b64": api["agent_cert_b64"],
+                "tool_name": "google_calendar",
+                "action": "read",
+                "params": {},
+            })
+            assert reuse.status_code == 401
+        finally:
+            config_module.CORE_DIR = original_core
+            config_module.AGENTS_SOUL_DIR = original_agents
+            main_module.CORE_DIR = original_core
+            main_module.AGENTS_SOUL_DIR = original_agents
+
     # -----------------------------------------------------------------------
     # Fix: Startup warns about request cert trust
     # -----------------------------------------------------------------------
 
     def test_startup_warns_about_request_cert(self, api):
         """
-        FIX 10: TRUST_REQUEST_CERT must default to False in shared/config.py.
-        The warning code path for when it is True must exist in main.py.
-        (The test-suite setup fixture patches main.TRUST_REQUEST_CERT=True so
-        TestClient requests work; this test verifies the production default.)
+        The request-body certificate fallback must be absent from the clean repo.
         """
         import shared.config as cfg
-        import os
-        # The module-level default in shared/config.py must honour the env var.
-        expected = os.environ.get("MAHAGUARDIAN_DEV_MODE") == "1"
-        assert cfg.TRUST_REQUEST_CERT is expected
-        # The warning code path must exist for when it is enabled in dev mode.
         source = Path(__file__).parent.parent / "guardian" / "main.py"
         source_text = source.read_text()
-        assert "trust_request_cert_enabled" in source_text
-        assert "TRUST_REQUEST_CERT" in source_text
+        assert not hasattr(cfg, "TRUST_REQUEST_CERT")
+        assert "TRUST_REQUEST_CERT" not in source_text
+        assert "agent_cert_b64" not in source_text
 
     # -----------------------------------------------------------------------
     # Fix: Agent must not dictate its own permissions
@@ -1272,9 +1354,10 @@ class TestSkillsPathValidation:
     """Skill paths must resolve within SKILLS_DIR."""
 
     @pytest.fixture()
-    def api(self, setup):
+    def api(self, setup, monkeypatch):
         tmp_path = setup
         vault_dict, agent_cert, agent_cert_b64, token_str = _full_guardian_init(tmp_path)
+        monkeypatch.setattr(main_module, "_get_agent_cert", lambda request: agent_cert)
         client = TestClient(app, raise_server_exceptions=False)
         return {
             "client": client,

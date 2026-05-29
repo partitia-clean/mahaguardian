@@ -11,8 +11,8 @@ Phase 3 additions:
     NOT signature) recursively up to depth 10, checking for partition
     names in direct, URL-encoded, and unicode-escaped forms.
   - TLP matrix enforcement via shared/tlp_matrix.py.
-  - All DENY decisions log to both guardian/audit.py and the new
-    guardian/audit_chain.py with identical field fidelity.
+  - When an audit_chain is provided, DENY decisions log to both
+    guardian/audit.py and guardian/audit_chain.py with matching semantics.
 
 All enforcement MUST go through enforce() or resolve_and_enforce().
 """
@@ -213,6 +213,7 @@ def resolve_and_enforce(
     agent_id: str,
     *,
     known_partitions: list[str],
+    audit_chain: Optional[object] = None,
 ) -> DataItem:
     """
     Resolve which DataItem *key* refers to, then enforce TLP.
@@ -252,6 +253,7 @@ def resolve_and_enforce(
         return _resolve_and_enforce_inner(
             key, token_partitions, tlp_level, params, vault_items, agent_id,
             known_partitions=known_partitions,
+            audit_chain=audit_chain,
         )
     finally:
         elapsed = time.monotonic() - _start
@@ -268,6 +270,7 @@ def _resolve_and_enforce_inner(
     agent_id: str,
     *,
     known_partitions: list[str],
+    audit_chain: Optional[object] = None,
 ) -> DataItem:
     """Inner implementation of resolve_and_enforce (without timing wrapper)."""
     # F-01: known_partitions is required — no vault-derived fallback.
@@ -291,6 +294,12 @@ def _resolve_and_enforce_inner(
             agent_id=agent_id,
             result="denied:access_denied",
         )
+        if audit_chain is not None:
+            audit_chain.append(
+                agent_id=agent_id, partition_id="",
+                method="vault.read", params=params,
+                decision=Decision.DENY, reason_code="not_found",
+            )
         raise EnforcementDenied("not_found")  # reason_code internal; safe_message="access_denied"
 
     if len(items) > 1:
@@ -299,6 +308,12 @@ def _resolve_and_enforce_inner(
             agent_id=agent_id,
             result="denied:ambiguous_key",
         )
+        if audit_chain is not None:
+            audit_chain.append(
+                agent_id=agent_id, partition_id="",
+                method="vault.read", params=params,
+                decision=Decision.DENY, reason_code="ambiguous_key",
+            )
         raise AmbiguousKeyError()
 
     item = items[0]
@@ -310,6 +325,12 @@ def _resolve_and_enforce_inner(
             agent_id=agent_id,
             result="denied:access_denied",
         )
+        if audit_chain is not None:
+            audit_chain.append(
+                agent_id=agent_id, partition_id="[redacted]",
+                method="vault.read", params=params,
+                decision=Decision.DENY, reason_code="partition_unauthorized",
+            )
         raise EnforcementDenied("partition_unauthorized")
 
     # TLP matrix
@@ -324,6 +345,12 @@ def _resolve_and_enforce_inner(
             partition_id="[redacted]",
             result="denied:tlp_insufficient",
         )
+        if audit_chain is not None:
+            audit_chain.append(
+                agent_id=agent_id, partition_id="[redacted]",
+                method="vault.read", params=params,
+                decision=Decision.DENY, reason_code="tlp_insufficient",
+            )
         raise EnforcementDenied("tlp_insufficient")
 
     if decision == Decision.ELEVATE:
@@ -336,6 +363,12 @@ def _resolve_and_enforce_inner(
             partition_id="[redacted]",
             result="pending:elevate_required",
         )
+        if audit_chain is not None:
+            audit_chain.append(
+                agent_id=agent_id, partition_id="[redacted]",
+                method="vault.read", params=params,
+                decision=Decision.DENY, reason_code="elevate_required",
+            )
         raise EnforcementDenied("elevate_required",
                                 safe_message="access_denied")
 
@@ -346,6 +379,12 @@ def _resolve_and_enforce_inner(
         partition_id=item.owner_partition,
         result="success",
     )
+    if audit_chain is not None:
+        audit_chain.append(
+            agent_id=agent_id, partition_id=item.owner_partition,
+            method="vault.read", params=params,
+            decision=Decision.ALLOW, reason_code="allow",
+        )
     return item
 
 
@@ -421,8 +460,6 @@ async def enforce(
             "Derive it from enrollment config, not from vault_items keys."
         )
 
-    agent_id = request.token.agent_id  # type: ignore[union-attr]
-
     # FIX 3: capture start time for timing normalization (mirrors resolve_and_enforce)
     _enforce_start = time.monotonic()
     try:
@@ -435,7 +472,6 @@ async def enforce(
             elevate_callback=elevate_callback,
             audit_chain=audit_chain,
             known_partitions=known_partitions,
-            agent_id=agent_id,
         )
     finally:
         elapsed = time.monotonic() - _enforce_start
@@ -453,7 +489,6 @@ async def _enforce_inner(
     elevate_callback,
     audit_chain,
     known_partitions,
-    agent_id: str,
 ) -> DataItem:
     """Inner implementation of enforce() without the timing wrapper."""
     # -----------------------------------------------------------------------
@@ -467,18 +502,22 @@ async def _enforce_inner(
             verify_key_bytes,
         )
     except _shared_token.TokenVerifyError as exc:
+        unverified_agent_id = getattr(request.token, "agent_id", "unknown")
+        log_agent_id = f"unverified:{unverified_agent_id}"
         audit.log(
             action="vault.enforce",
-            agent_id=agent_id,
+            agent_id=log_agent_id,
             result=f"denied:token_invalid:{type(exc).__name__}",
         )
         if audit_chain is not None:
             audit_chain.append(
-                agent_id=agent_id, partition_id="",
+                agent_id=log_agent_id, partition_id="",
                 method="vault.enforce", params=request.params,
                 decision=Decision.DENY, reason_code="token_invalid",
             )
         raise EnforcementDenied("token_invalid") from exc
+
+    agent_id = request.token.agent_id  # type: ignore[union-attr]
 
     # -----------------------------------------------------------------------
     # Step 2b: Replay protection
@@ -552,7 +591,7 @@ async def _enforce_inner(
         )
         if audit_chain is not None:
             audit_chain.append(
-                agent_id=agent_id, partition_id=item.owner_partition,
+                agent_id=agent_id, partition_id="[redacted]",
                 method="vault.enforce", params=request.params,
                 decision=Decision.DENY, reason_code="partition_unauthorized",
             )

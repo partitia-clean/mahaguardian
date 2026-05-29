@@ -66,17 +66,14 @@ from shared.config import (
     AGENTS_SOUL_DIR,
     AUDIT_DB_PATH,
     CA_CERT_PATH,
-    CERTS_DIR,
     CORE_DIR,
     GUARDIAN_CERT_PATH,
     GUARDIAN_HOST,
     GUARDIAN_KEY_PATH,
     GUARDIAN_PORT,
     LOGS_DIR,
-    PRODUCTION_MODE,
     SKILLS_DIR,
     TOKEN_LIFETIME_HOURS,
-    TRUST_REQUEST_CERT,
 )
 from shared.models import PaymentRequest
 from shared.types import Decision, TlpLevel
@@ -105,7 +102,6 @@ _deduplicator: Optional[RequestDeduplicator] = None
 
 class TokenIssueRequest(BaseModel):
     agent_id: str
-    agent_cert_b64: str  # base64 encoded agent certificate bytes
     # Permissions are derived from Guardian's local vault config,
     # NEVER from the agent's request. The agent must not dictate
     # its own permissions — this breaks the split-trust model.
@@ -113,19 +109,16 @@ class TokenIssueRequest(BaseModel):
 
 class TokenVerifyRequest(BaseModel):
     token_str: str
-    agent_cert_b64: str
 
 
 class TokenRevokeRequest(BaseModel):
     agent_id: str
     token_str: str            # the token TO BE REVOKED (not a separate auth token)
-    agent_cert_b64: str       # agent certificate for token verification
 
 
 class ToolCallRequest(BaseModel):
     agent_id: str
     token_str: str            # signed JSON token string
-    agent_cert_b64: str       # base64 encoded agent certificate
     tool_name: str
     action: str
     params: dict = {}
@@ -134,7 +127,6 @@ class ToolCallRequest(BaseModel):
 
 class PartitionAccessRequest(BaseModel):
     token_str: str            # Phase 3 AccessToken JSON string
-    agent_cert_b64: str       # base64 encoded agent certificate
     key: str                  # data key — Guardian resolves the partition; agents never supply partition names
     agent_id: str
     action: str = "data.request"
@@ -159,20 +151,17 @@ class SkillVerifyRequest(BaseModel):
     skill_path: str
     manifest_path: str
     token_str: str
-    agent_cert_b64: str
     agent_id: str
 
 
 class SkillLoadRequest(BaseModel):
     agent_id: str
     token_str: str
-    agent_cert_b64: str
 
 
 class PaymentExecuteRequest(BaseModel):
     agent_id: str
     token_str: str            # signed JSON token string
-    agent_cert_b64: str       # base64 encoded agent certificate
     payment_request: PaymentRequest
 
 
@@ -183,19 +172,16 @@ class AuditQueryRequest(BaseModel):
     from_timestamp: Optional[str] = None
     to_timestamp: Optional[str] = None
     token_str: str
-    agent_cert_b64: str
     requesting_agent_id: str
 
 
 class AuditIntegrityRequest(BaseModel):
     token_str: str
-    agent_cert_b64: str
     agent_id: str
 
 
 class SessionStartRequest(BaseModel):
     agent_id: str
-    agent_cert_b64: str  # PHASE 1: from request body; PHASE 3: from TLS session
     # Permissions and lifetime are derived from Guardian's local vault
     # config, NEVER from the agent's request.
 
@@ -204,42 +190,38 @@ class SessionStartRequest(BaseModel):
 # Security helpers
 # ---------------------------------------------------------------------------
 
-def _get_agent_cert(request: Request, agent_cert_b64: str = "") -> bytes:
+def _get_agent_cert(request: Request) -> bytes:
     """
-    Get agent certificate bytes.
-
-    Priority:
-    1. Real TLS peer cert from request.state.peer_cert_der
-       (set by PeerCertMiddleware from the actual mTLS session)
-    2. Fallback to agent_cert_b64 from request body
-       (Phase 1 testing only — logged as warning)
-
-    Phase 3: remove fallback, set TRUST_REQUEST_CERT=False.
+    Get agent certificate bytes from the mTLS session.
+    This is the only trusted source of peer identity.
     """
     peer_cert = getattr(request.state, "peer_cert_der", None)
-    if peer_cert is not None:
-        return peer_cert
+    if peer_cert is None:
+        audit.log(
+            action="cert.missing_from_mtls",
+            result="critical:no_peer_cert",
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="No TLS peer certificate found in request state.",
+        )
+    return peer_cert
 
-    if not TRUST_REQUEST_CERT:
+
+def _verify_cert_and_agent_id(agent_cert: bytes, expected_agent_id: str) -> None:
+    """Fail closed unless the mTLS peer certificate matches expected_agent_id."""
+    try:
+        verify_peer_agent_id_from_der(agent_cert, expected_agent_id)
+    except Exception as exc:
+        audit.log(
+            action="cert.identity_verification",
+            agent_id=expected_agent_id,
+            result=f"failure:{type(exc).__name__}",
+        )
         raise HTTPException(
             status_code=403,
-            detail="No TLS peer certificate. "
-                   "TRUST_REQUEST_CERT is disabled.",
-        )
-
-    # Phase 1 fallback: decode from request body
-    # ALWAYS log when using this path — it bypasses TLS identity
-    if agent_cert_b64:
-        audit.log(
-            action="cert.fallback_used",
-            result="warning:request_body_cert_trusted",
-        )
-        return base64.b64decode(agent_cert_b64)
-
-    raise HTTPException(
-        status_code=403,
-        detail="No certificate provided",
-    )
+            detail="Certificate identity verification failed.",
+        ) from exc
 
 
 def _parse_token(token_str: str) -> AccessToken:
@@ -375,6 +357,114 @@ def _check_revoke_rate_limit(agent_id: str) -> None:
     _revoke_timestamps[agent_id] = timestamps
 
 
+def _append_audit_chain(
+    *,
+    agent_id: str,
+    method: str,
+    decision: Decision,
+    reason_code: str,
+    partition_id: str = "",
+    params: Optional[dict] = None,
+) -> None:
+    """Best-effort wrapper for writing to the cryptographic audit chain."""
+    if _audit_chain is None:
+        return
+    _audit_chain.append(
+        agent_id=agent_id,
+        partition_id=partition_id,
+        method=method,
+        params=params or {},
+        decision=decision,
+        reason_code=reason_code,
+    )
+
+
+def _persist_revocation_state(state: dict, passphrase: str) -> None:
+    """Persist revocation state into the unlocked vault."""
+    if _vault_dict is None:
+        raise RuntimeError("Vault is not unlocked.")
+    if "revocation_state" not in _vault_dict:
+        _vault_dict["revocation_state"] = "{}"
+    vault.rotate_secret(
+        _vault_dict,
+        "revocation_state",
+        json.dumps(state, sort_keys=True),
+        passphrase,
+    )
+
+
+async def _invalidate_existing_session(agent_id: str) -> None:
+    """
+    Revoke session-issued tokens, stop any WS connection, and remove the session.
+    If any step fails, abort new session creation (fail closed).
+    """
+    from guardian.session_state import get_session, remove_session
+
+    existing = get_session(agent_id)
+    if existing is None or not existing.active:
+        return
+
+    try:
+        for token_id in sorted(existing.token_ids):
+            _revocation_store.revoke_token(token_id)
+        audit.log(
+            action="session.replace",
+            agent_id=agent_id,
+            result=f"revoked_tokens:{len(existing.token_ids)}",
+        )
+        _append_audit_chain(
+            agent_id=agent_id,
+            method="session.replace",
+            decision=Decision.DENY,
+            reason_code="revoked_prior_session_tokens",
+            params={"count": len(existing.token_ids)},
+        )
+
+        ws_client = _ws_clients.pop(agent_id, None)
+        if ws_client:
+            await ws_client.stop()
+            audit.log(
+                action="session.replace",
+                agent_id=agent_id,
+                result="ws_closed",
+            )
+            _append_audit_chain(
+                agent_id=agent_id,
+                method="session.replace",
+                decision=Decision.DENY,
+                reason_code="prior_session_ws_closed",
+            )
+
+        remove_session(agent_id)
+        audit.log(
+            action="session.replaced",
+            agent_id=agent_id,
+            result="previous_session_closed",
+        )
+        _append_audit_chain(
+            agent_id=agent_id,
+            method="session.replace",
+            decision=Decision.DENY,
+            reason_code="prior_session_removed",
+        )
+    except Exception as exc:
+        audit.log(
+            action="session.replace",
+            agent_id=agent_id,
+            result=f"failure:{type(exc).__name__}:{exc}",
+        )
+        _append_audit_chain(
+            agent_id=agent_id,
+            method="session.replace",
+            decision=Decision.DENY,
+            reason_code="prior_session_invalidation_failed",
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Existing session invalidation failed.",
+        ) from exc
+
+
 # ---------------------------------------------------------------------------
 # Internal functions — shared by HTTP and WebSocket handlers
 # ---------------------------------------------------------------------------
@@ -418,7 +508,7 @@ async def _check_partition_internal(
     Transport-agnostic: called by both HTTP endpoint and WS router.
     Raises EnforcementDenied if the agent is not authorized.
     """
-    token = _parse_token(token_str)
+    token = _verify_token_from_str(token_str, agent_cert)
     _check_agent_id_match(agent_id, token)
 
     vault_items = vault._get_vault_items_unfiltered(_vault_dict)
@@ -516,30 +606,6 @@ async def lifespan(app: FastAPI):
                               hmac_key=_audit_chain_key)
     audit.log(action="guardian.startup", result="audit_chain_initialised")
 
-    # Production mode enforcement
-    if PRODUCTION_MODE and TRUST_REQUEST_CERT:
-        print(
-            "FATAL: TRUST_REQUEST_CERT must be False in production mode. "
-            "Set MAHAGUARDIAN_PRODUCTION=false or disable TRUST_REQUEST_CERT."
-        )
-        audit.log(
-            action="guardian.startup",
-            result="failure:production_mode_with_trust_request_cert",
-        )
-        sys.exit(1)
-
-    # Phase 1 cert trust warning (TRUST_REQUEST_CERT from shared.config)
-    if TRUST_REQUEST_CERT:
-        print(
-            "WARNING: Guardian accepts agent certs from request bodies. "
-            "This is Phase 1 localhost mode only. "
-            "Set TRUST_REQUEST_CERT=False before production deployment."
-        )
-        audit.log(
-            action="guardian.startup",
-            result="warning:trust_request_cert_enabled",
-        )
-
     # 2. Vault
     passphrase = os.environ.get("MAHAGUARDIAN_PASSPHRASE", "")
     if not passphrase:
@@ -618,7 +684,26 @@ async def lifespan(app: FastAPI):
             _verify_key_bytes = bytes(_sk_obj.verify_key)
             audit.log(action="guardian.startup",
                       result="warning:token_keypair_ephemeral:no_keys_in_vault")
-        _revocation_store = RevocationStore()
+        try:
+            raw_revocation_state = vault.get_secret(_vault_dict, "revocation_state")
+            if isinstance(raw_revocation_state, str):
+                revocation_state = json.loads(raw_revocation_state)
+            else:
+                revocation_state = raw_revocation_state
+        except KeyError:
+            revocation_state = {
+                "revoked_tokens": {},
+                "revoked_agents": {},
+            }
+            audit.log(
+                action="guardian.startup",
+                result="revocation_store_initialised_empty",
+            )
+
+        _revocation_store = RevocationStore(
+            persist_callback=lambda state: _persist_revocation_state(state, passphrase)
+        )
+        _revocation_store.load(revocation_state)
         _deduplicator = RequestDeduplicator()
         audit.log(action="guardian.startup", result="tokens_initialised")
     except Exception as exc:
@@ -728,52 +813,10 @@ async def api_start_session(req: SessionStartRequest, request: Request):
     5. Issue Guardian Access Token
     6. Return session_id, token, and system prompt
     """
-    # Prevent double session — close existing before starting new
-    from guardian.session_state import get_session, remove_session
-    existing = get_session(req.agent_id)
-    if existing and existing.active:
-        ws_client = _ws_clients.pop(req.agent_id, None)
-        if ws_client:
-            await ws_client.stop()
-        remove_session(req.agent_id)
-        audit.log(
-            action="session.replaced",
-            agent_id=req.agent_id,
-            result="previous_session_closed",
-        )
+    await _invalidate_existing_session(req.agent_id)
 
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
-
-    # ALWAYS verify cert CN matches agent_id, regardless of cert source.
-    # This runs on real TLS certs AND fallback request-body certs.
-    try:
-        verify_peer_agent_id_from_der(agent_cert, req.agent_id)
-    except Exception:
-        try:
-            from cryptography import x509 as _x509
-            cert = _x509.load_pem_x509_certificate(agent_cert)
-            cn = cert.subject.get_attributes_for_oid(
-                _x509.oid.NameOID.COMMON_NAME
-            )[0].value
-            if cn != req.agent_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"Cert CN '{cn}' does not match "
-                           f"agent_id '{req.agent_id}'",
-                )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            audit.log(
-                action="session.start",
-                agent_id=req.agent_id,
-                result=f"warning:cn_verification_failed:{type(exc).__name__}",
-            )
-            if not TRUST_REQUEST_CERT:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Certificate CN verification failed",
-                )
+    agent_cert = _get_agent_cert(request)
+    _verify_cert_and_agent_id(agent_cert, req.agent_id)
 
     # Get SOUL public key from vault
     try:
@@ -904,6 +947,7 @@ async def api_start_session(req: SessionStartRequest, request: Request):
         session_id=session_id,
         llm_provider=llm_provider,
         is_primary=is_primary,
+        token_ids={_token_obj.token_id},
     ))
 
     if not is_primary:
@@ -954,32 +998,8 @@ async def api_start_session(req: SessionStartRequest, request: Request):
 @app.post("/tokens/issue")
 async def api_issue_token(req: TokenIssueRequest, request: Request):
     """Issue a new Guardian Access Token for an agent."""
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
-
-    # ALWAYS verify cert CN matches agent_id, regardless of cert source
-    try:
-        verify_peer_agent_id_from_der(agent_cert, req.agent_id)
-    except Exception:
-        try:
-            from cryptography import x509 as _x509
-            cert = _x509.load_pem_x509_certificate(agent_cert)
-            cn = cert.subject.get_attributes_for_oid(
-                _x509.oid.NameOID.COMMON_NAME
-            )[0].value
-            if cn != req.agent_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"Cert CN '{cn}' does not match "
-                           f"agent_id '{req.agent_id}'",
-                )
-        except HTTPException:
-            raise
-        except Exception:
-            if not TRUST_REQUEST_CERT:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Certificate CN verification failed",
-                )
+    agent_cert = _get_agent_cert(request)
+    _verify_cert_and_agent_id(agent_cert, req.agent_id)
 
     # Derive permissions from Guardian's local vault config
     # NEVER from the agent's request
@@ -1002,7 +1022,10 @@ async def api_issue_token(req: TokenIssueRequest, request: Request):
             issuer="guardian",
             signing_key_bytes=_signing_key_bytes,
         )
-        return {"token": _token_obj.to_json()}
+        token_str = _token_obj.to_json()
+        from guardian.session_state import add_token_id
+        add_token_id(req.agent_id, _token_obj.token_id)
+        return {"token": token_str}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -1010,7 +1033,7 @@ async def api_issue_token(req: TokenIssueRequest, request: Request):
 @app.post("/tokens/verify")
 async def api_verify_token(req: TokenVerifyRequest, request: Request):
     """Verify a Phase 3 Guardian Access Token."""
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
+    agent_cert = _get_agent_cert(request)
     try:
         token = _verify_token_from_str(req.token_str, agent_cert)
         return {
@@ -1038,7 +1061,7 @@ async def api_revoke_token(req: TokenRevokeRequest, request: Request):
     has it, use the bulk revoke-all endpoint with admin
     passphrase to revoke all tokens for that agent.
     """
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
+    agent_cert = _get_agent_cert(request)
     try:
         token = _verify_token_from_str(req.token_str, agent_cert)
     except TokenVerifyError as exc:
@@ -1052,6 +1075,8 @@ async def api_revoke_token(req: TokenRevokeRequest, request: Request):
 
     _check_revoke_rate_limit(req.agent_id)
     _revocation_store.revoke_token(target_token_id)
+    from guardian.session_state import discard_token_id
+    discard_token_id(req.agent_id, target_token_id)
 
     return {"revoked": True, "token_id": target_token_id}
 
@@ -1119,7 +1144,7 @@ async def api_revoke_all_tokens(req: TokenRevokeAllRequest):
 @app.post("/enforce/partition")
 async def api_enforce_partition(req: PartitionAccessRequest, request: Request):
     """Check partition access for an agent token. Guardian resolves the partition from the key."""
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
+    agent_cert = _get_agent_cert(request)
     try:
         return await _check_partition_internal(
             req.token_str, agent_cert, req.agent_id,
@@ -1138,7 +1163,7 @@ async def api_enforce_partition(req: PartitionAccessRequest, request: Request):
 @app.post("/tools/execute")
 async def api_execute_tool(req: ToolCallRequest, request: Request):
     """Execute a tool call with authorization enforcement."""
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
+    agent_cert = _get_agent_cert(request)
     try:
         return await _execute_tool_internal(
             req.token_str, agent_cert, req.agent_id,
@@ -1160,7 +1185,7 @@ async def api_execute_tool(req: ToolCallRequest, request: Request):
 @app.post("/payments/execute")
 async def api_execute_payment(req: PaymentExecuteRequest, request: Request):
     """Execute a payment with policy enforcement and approval flow."""
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
+    agent_cert = _get_agent_cert(request)
     try:
         return await _execute_payment_internal(
             req.token_str, agent_cert, req.agent_id,
@@ -1221,7 +1246,7 @@ async def api_stop_heartbeat(req: HeartbeatStopRequest):
 @app.post("/skills/verify")
 async def api_verify_skill(req: SkillVerifyRequest, request: Request):
     """Verify a skill file against its manifest."""
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
+    agent_cert = _get_agent_cert(request)
     try:
         token = _verify_token_from_str(req.token_str, agent_cert)
     except TokenVerifyError as exc:
@@ -1274,7 +1299,7 @@ async def api_verify_skill(req: SkillVerifyRequest, request: Request):
 @app.post("/skills/load")
 async def api_load_skills(req: SkillLoadRequest, request: Request):
     """Load all verified skills for an agent."""
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
+    agent_cert = _get_agent_cert(request)
     try:
         token = _verify_token_from_str(req.token_str, agent_cert)
     except TokenVerifyError as exc:
@@ -1296,7 +1321,7 @@ async def api_load_skills(req: SkillLoadRequest, request: Request):
 @app.post("/audit/query")
 async def api_query_audit(req: AuditQueryRequest, request: Request):
     """Query the audit log. Agents can only query their own logs."""
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
+    agent_cert = _get_agent_cert(request)
     try:
         token = _verify_token_from_str(req.token_str, agent_cert)
     except TokenVerifyError as exc:
@@ -1340,7 +1365,7 @@ async def api_query_audit(req: AuditQueryRequest, request: Request):
 @app.post("/audit/integrity")
 async def api_verify_audit_integrity(req: AuditIntegrityRequest, request: Request):
     """Verify audit log hash chain integrity. Requires audit_read_all."""
-    agent_cert = _get_agent_cert(request, req.agent_cert_b64)
+    agent_cert = _get_agent_cert(request)
     try:
         token = _verify_token_from_str(req.token_str, agent_cert)
     except TokenVerifyError as exc:
@@ -1369,7 +1394,7 @@ def _build_guardian_ssl_context():
     """
     Build SSL context for Guardian's local HTTPS server.
     Requires client certificate for mTLS.
-    Returns None if cert files don't exist (Phase 1 dev mode).
+    Returns None if cert files don't exist.
     """
     import ssl as _ssl
     if not GUARDIAN_CERT_PATH.exists() or not GUARDIAN_KEY_PATH.exists():
@@ -1384,13 +1409,7 @@ def _build_guardian_ssl_context():
     )
     if CA_CERT_PATH.exists():
         ctx.load_verify_locations(cafile=str(CA_CERT_PATH))
-    # Phase 1 testing: TestClient doesn't do TLS, so tests
-    # use TRUST_REQUEST_CERT=True fallback with CERT_OPTIONAL.
-    # Production: MUST be CERT_REQUIRED.
-    if TRUST_REQUEST_CERT:
-        ctx.verify_mode = _ssl.CERT_OPTIONAL  # Phase 1 only
-    else:
-        ctx.verify_mode = _ssl.CERT_REQUIRED  # Production
+    ctx.verify_mode = _ssl.CERT_REQUIRED
     ctx.check_hostname = False  # we verify CN manually
     return ctx
 

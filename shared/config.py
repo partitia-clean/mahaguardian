@@ -50,10 +50,6 @@ PARTITIONS_DIR: Path = VAULT_DIR / "partitions"
 
 GENESIS_HASH: str = "GENESIS"     # first audit log entry prev_hash
 
-# FIX 10: Default False. Only allow True in explicit dev mode.
-# Set MAHAGUARDIAN_DEV_MODE=1 in the environment for local testing only.
-TRUST_REQUEST_CERT: bool = os.environ.get("MAHAGUARDIAN_DEV_MODE") == "1"
-
 # WebSocket reconnection settings (Phase 2)
 WS_RECONNECT_BASE_SECONDS: int = 2
 WS_RECONNECT_MAX_SECONDS: int = 60

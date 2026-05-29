@@ -2,8 +2,7 @@
 ASGI middleware for extracting client certificates from TLS sessions.
 
 Stores peer_cert_der in request.state for use by endpoint handlers.
-This is the foundation for real mTLS transport binding — replacing
-the Phase 1 pattern of trusting agent_cert_b64 from request bodies.
+This is the only trusted source for endpoint certificate identity.
 """
 from __future__ import annotations
 
@@ -17,8 +16,7 @@ class PeerCertMiddleware(BaseHTTPMiddleware):
     in request.state.peer_cert_der.
 
     If no TLS session or no peer cert (e.g., TestClient without TLS),
-    peer_cert_der is set to None. Endpoint handlers decide whether
-    to fall back to request-body certs (Phase 1) or reject (Phase 3).
+    peer_cert_der is set to None and endpoint handlers reject the request.
     """
 
     async def dispatch(self, request: Request, call_next):

@@ -290,8 +290,8 @@ def verify_token(token_str: str, agent_cert: bytes) -> dict:
         audit.log(action="token.verify", result="failure:missing_sig")
         raise TokenInvalidError("Token has no signature.")
 
-    token_id = token_dict.get("token_id", "unknown")
-    agent_id = token_dict.get("agent_id", "unknown")
+    unverified_token_id = token_dict.get("token_id", "unknown")
+    unverified_agent_id = token_dict.get("agent_id", "unknown")
 
     # --- Signature ---
     try:
@@ -301,11 +301,14 @@ def verify_token(token_str: str, agent_cert: bytes) -> dict:
     except (nacl.exceptions.BadSignatureError, Exception) as exc:
         audit.log(
             action="token.verify",
-            agent_id=agent_id,
-            resource=token_id,
+            agent_id=f"unverified:{unverified_agent_id}",
+            resource=unverified_token_id,
             result="failure:bad_signature",
         )
         raise TokenInvalidError("Token signature verification failed.") from exc
+
+    token_id = token_dict.get("token_id", "unknown")
+    agent_id = token_dict.get("agent_id", "unknown")
 
     # --- Expiry ---
     try:
